@@ -1,0 +1,413 @@
+---
+title: "Hackathon - Task 2"
+author: "Jasmin Mehnert"
+date: "(Fall 2024) Introduction to Data Science Workshop"
+output: 
+    rmdformats::robobook:
+    toc: TRUE
+    df_print: paged
+    number_sections: FALSE
+    highlight: tango
+    toc_depth: 3
+    toc_float: true
+    full_width: true
+---
+
+### Authors:
+
+**Jasmin Mehnert, E-Mail: j.mehnert@students.hertie-school.org**
+
+---
+
+# **🦸‍♀️ Representation and Recognition: Exploring Women’s Progress in Politics and Public Visibility**
+
+## **📝 Introduction**
+
+Imagine walking into a room designed for someone else. The furniture doesn’t fit, the walls echo with unfamiliar voices, and every step feels unsteady. For decades, women entering parliaments around the world have faced this reality. As [Erikson & Verge (2022)](https://doi.org/10.1093/pa/gsaa048) argue, parliaments are not neutral spaces—they are workplaces shaped by rules, rewards, and structures that reflect societal inequalities. These institutions were built around the experiences and interests of "typical members"—historically, men. 
+
+For women, participating in political leadership this raises important questions: Do they experience shorter careers, less public recognition, and barriers rooted in institutional norms? 
+
+To investigate these questions, we use the Comparative Legislators Database—a comprehensive dataset containing information on over 67,000 legislators across 16 countries [(Göbel & Munzert, 2022)](https://doi.org/10.1017/S0007123421000210). By combining data on parliamentary participation with Wikipedia traffic we address our central research question:
+
+**How has female representation in politics evolved over time, and does public visibility reflect this progress?** 
+
+To explore this, we break it down into three questions:
+
+- How has women’s representation in parliaments changed over time? 
+- Do female politicians attract more or less online attention compared to male politicians? 
+- How long do women remain in parliament relative to their male counterparts over time? 
+
+We selected **Turkey, Brazil, Japan, Germany, the United Kingdom, and Canada** to ensure a balanced comparison across diverse political, cultural, and geographic contexts. These countries represent different regions—Europe(Germany, UK), Asia (Japan, Turkey), and the Americas (Brazil, Canada). They also encompass a variety of political systems, including parliamentary democracies (Germany, UK, Canada), a presidential system (Brazil), and hybrid systems (Turkey, Japan). Additionally, these countries differ in their levels of economic development and progress toward gender equality, offering a broader perspective on women’s representation in politics. 
+
+---
+
+## **1. The Rise of Women in Parliaments Over Time**
+
+How has women’s representation in parliaments changed over time? Starting from 1950 onwards, the data reveals that while more women have entered parliaments globally, the pace and extent of progress vary significantly across countries. The analysis of six countries highlights distinct trends.  
+
+```{r women_parliament_plot, echo=FALSE, message=FALSE, warning=FALSE}
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(gridExtra)
+library(legislatoR)
+library(tidyr)
+
+
+# -------------------------
+# Fraction of woman over sessions since 1950
+# -------------------------
+
+
+# Merge `get_political` with `get_core` by `pageid`
+merge_with_gender <- function(political_data, core_data) {
+  political_data %>%
+    left_join(core_data %>% select(pageid, sex), by = "pageid") %>%
+    filter(!is.na(sex))  # Remove missing gender data
+}
+
+# Filter for sessions after 1950 and merge gender information
+process_country_data <- function(political_data, core_data, session_filter = NULL, date_filter = NULL, country_name) {
+  data <- merge_with_gender(political_data, core_data)
+  
+  if (!is.null(session_filter)) {
+    data <- data %>% filter(session >= session_filter)
+  }
+  if (!is.null(date_filter)) {
+    data <- data %>% filter(session_start >= date_filter)
+  }
+  
+  data %>%
+    group_by(session) %>%
+    summarize(
+      total = n(),
+      female_count = sum(sex == "female"),
+      fraction_female = female_count / total
+    ) %>%
+    mutate(country = country_name)
+}
+
+# Load core and political data for each legislature
+Turkey_core <- get_core(legislature = "tur")
+Brazil_core <- get_core(legislature = "bra")
+Japan_core <- get_core(legislature = "jpn")
+Germany_core <- get_core(legislature = "deu")
+UK_core <- get_core(legislature = "gbr")
+Canada_core <- get_core(legislature = "can")
+
+Turkey <- get_political(legislature = "tur")
+Brazil <- get_political(legislature = "bra")
+Japan <- get_political(legislature = "jpn")
+Germany <- get_political(legislature = "deu")
+UK <- get_political(legislature = "gbr")
+Canada <- get_political(legislature = "can")
+
+# Process data for each country
+Turkey_stats <- process_country_data(Turkey, Turkey_core, session_filter = 9, country_name = "Turkey")
+Brazil_stats <- process_country_data(Brazil, Brazil_core, session_filter = 39, country_name = "Brazil")
+Japan_stats <- process_country_data(Japan, Japan_core, session_filter = 24, country_name = "Japan")
+Germany_stats <- process_country_data(Germany, Germany_core, date_filter = as.Date("1950-01-01"), country_name = "Germany")
+UK_stats <- process_country_data(UK, UK_core, date_filter = as.Date("1950-01-01"), country_name = "United Kingdom")
+Canada_stats <- process_country_data(Canada, Canada_core, date_filter = as.Date("1950-01-01"), country_name = "Canada")
+
+# Combine all country data
+all_countries <- bind_rows(Turkey_stats, Brazil_stats, Japan_stats, Germany_stats, UK_stats, Canada_stats)
+
+
+plot_women <- ggplot(all_countries, aes(x = session, y = fraction_female)) +
+  geom_line(size = 1, color = "#d22e2e") +  # Keep Economist-style blue line
+  facet_wrap(~ country, scales = "free_x") +  # Facet by country
+  labs(
+    title = "Fraction of Women in Parliaments Over Sessions after 1950",
+    x = "Session (Starts at First Session after 1950)",
+    y = "Fraction of Women"
+  ) +
+  theme_economist() +  # Apply The Economist theme
+  theme(
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 15)),  # Add space below title
+    strip.text = element_text(size = 12, face = "bold", margin = margin(b = 10)),  # Space below facet labels
+    axis.title.x = element_text(margin = margin(t = 12)),  # Add space above x-axis title
+    axis.title.y = element_text(margin = margin(r = 12)),  # Add space to the right of y-axis title
+    axis.text.x = element_text(margin = margin(t = 5)),  # Add space above x-axis text
+    axis.text.y = element_text(margin = margin(r = 5))   # Add space to the right of y-axis text
+  )
+
+# Add explanatory text
+caption <- grid::textGrob(
+  "A session refers to the duration of a legislative term following an election. \nWe selected sessions starting closest to 1950 for each country for comparison.",
+  gp = grid::gpar(fontsize = 10, lineheight = 1.2, col = "black")
+)
+
+# Combine plot and text
+gridExtra::grid.arrange(plot_women, caption, ncol = 1, heights = c(10, 1))
+```
+
+**Key Insights:**
+
+**Germany** and the **United Kingdom** stand out as leaders in gender representation, with women now accounting for over **30% of parliamentarians**. This progress may reflect proactive policies, such as gender quotas in parties. For instance, in Germany, the introduction of gender quotas in political parties, such as the Social Democratic Party (SPD) in 1988, played a major role in advancing women’s representation [Davidson-Schmich (2006)](https://doi.org/10.1177/1354068806061338). Similarly, in the United Kingdom, momentum surged in the 1990s when the Labour Party implemented its "all-women shortlists," reserving candidacies for women in certain constituencies. These shortlists, combined with intersectional strategies addressing both gender and race, further improved representation, particularly for minority women, in subsequent elections [Krook & Nugent (2016)](https://mlkrook.org/pdf/pp_2016.pdf).
+
+**Canada** and **Brazil** show steady, albeit slower, improvements. While they’ve made strides, their representation still falls short compared to global front-runners. Meanwhile, **Japan** and **Turkey** struggle to keep up, with women making up **less than 15%** of their parliaments. These numbers may reflect deeper systemic and cultural barriers that continue to hinder women’s political participation.
+
+**Why Does This Matter?**
+
+The increasing presence of women in parliaments is a vital step toward greater equality, but representation is only the beginning. Are female politicians receiving the same public attention as their male colleagues?
+
+---
+
+## **2. Who Gets More Attention Online? Male vs. Female Politicians**
+
+The media and public attention are critical tools for political success. Politicians who capture public interest are more likely to influence policy, attract supporters, and secure leadership roles. Historically, women in politics have faced significant challenges in gaining equal visibility—particularly in traditional media, where women often face: 
+
+- Underrepresentation on "hard topics" like the economy and national security [Andrich & Domahidi (2023)](https://doi.org/10.1177/14648849231215194)
+
+- Gendered framing, emphasizing personal qualities or family roles rather than leadership achievements
+
+But does this pattern persist on modern digital platforms? In this part, we analyzed Wikipedia traffic—a contemporary measure of public interest—to compare how male and female politicians are viewed across six countries.
+
+```{r pressure, echo=FALSE, message=FALSE, warning=FALSE}
+# Select countries
+countries <- c("tur", "bra", "jpn", "deu", "gbr", "can")
+
+# An empty list to store combined data
+all_traffic_data <- list()
+
+# Loop: Load and prepare data for each country
+for (country in countries) {
+  
+  # Load core and traffic data
+  core <- get_core(legislature = country)
+  traffic <- get_traffic(legislature = country)
+  
+  # Filter traffic for dates after 2001
+  traffic <- traffic %>%
+    filter(date > as.Date("2001-12-31"))
+  
+  # Select relevant columns and merge data
+  combined <- core %>%
+    select(pageid, sex) %>%
+    left_join(traffic, by = "pageid") %>%
+    filter(!is.na(sex), !is.na(traffic), traffic > 0) %>%
+    mutate(country = country)  # Add country tag
+  
+  # Store the prepared data
+  all_traffic_data[[country]] <- combined
+}
+
+# Combine all country-level data
+final_data <- bind_rows(all_traffic_data)
+
+# Calculate average traffic by gender and country
+traffic_summary <- final_data %>%
+  group_by(country, sex) %>%
+  summarize(
+    mean_traffic = mean(traffic, na.rm = TRUE),
+    sd_traffic = sd(traffic, na.rm = TRUE),
+    n = n()
+  ) %>%
+  ungroup()
+```
+
+```{r ,echo=FALSE, message=FALSE, warning=FALSE}
+# Plot: Average traffic by gender with full country names
+plot_traffic <- ggplot(traffic_summary, aes(x = country, y = mean_traffic, fill = sex)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("female" = "brown", "male" = "black")) +
+  scale_x_discrete(
+    labels = c("bra" = "Brazil", "can" = "Canada", "deu" = "Germany", 
+               "gbr" = "United Kingdom", "jpn" = "Japan", "tur" = "Turkey")
+  ) +  
+  labs(
+    title = "Are Women in Politics More Popular Than Men?",
+    subtitle = "Average Wikipedia Traffic Per Day by Gender",
+    x = "Country",
+    y = "Average Traffic Per Day",
+    fill = "Gender"
+  ) +
+  theme_economist() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 15)),
+    plot.subtitle = element_text(size = 12, margin = margin(b = 10)),
+    axis.title.x = element_text(size = 12, margin = margin(t = 12), face = "bold"),
+    axis.title.y = element_text(size = 12, margin = margin(r = 12)),
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1, vjust = 1),
+    axis.text.y = element_text(size = 10, margin = margin(r = 5)),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10),
+    legend.position = "right"
+  )
+
+# Add explanatory caption
+caption <- grid::textGrob(
+  "Data filtered for traffic after 2001. Traffic reflects average daily views on Wikipedia pages of politicians.\nGender comparison is shown for six selected countries.",
+  gp = grid::gpar(fontsize = 10, lineheight = 1.2, col = "black")
+)
+
+# Combine plot and caption
+gridExtra::grid.arrange(plot_traffic, caption, ncol = 1, heights = c(10, 1))
+```
+
+**Key Insights:**
+
+Our analysis reveals a clear and consistent trend: female politicians receive higher average daily Wikipedia traffic than male politicians across all studied countries.
+
+Japan and the United Kingdom show the most significant differences, with female politicians attracting far more attention. This aligns with the visibility paradox [Graells-Garrido, Lalmas, and Menczer (2015)](https://ar5iv.labs.arxiv.org/html/1502.02341), which suggests that women in male-dominated systems draw disproportionate interest as their roles challenge traditional societal norms. For example, Yuriko Koike, Tokyo’s first female governor, commands substantial public interest due to her historic role. 
+ 
+In Brazil and Turkey, where female representation remains low, female politicians still receive higher average traffic than their male counterparts, suggesting heightened interest in their leadership and visibility. 
+ 
+Canada and Germany, with more balanced political environments and higher female representation, exhibit the same trend. Even as women’s roles become more normalized in these countries, public interest in female politicians remains consistently high. 
+
+**Digital Platforms’ Role:**
+
+ Unlike traditional media, where gatekeepers historically limited women’s visibility, platforms like Wikipedia and Twitter provide more equitable opportunities for exposure. A study of the 2015 Israeli elections found that female politicians’ social media posts generated significantly more engagement—likes, shares, and comments—than those of male politicians, even when accounting for factors such as age, party affiliation, and experience [Yarchi & Samuel-Azran (2018)](https://doi.org/10.1080/1369118X.2018.1439985). 
+
+This shift toward digital platforms highlights changing public perceptions and growing curiosity about female leadership. Women in politics, whether in systems with low or high representation, continue to capture substantial online attention, reflecting a growing interest in female voices in leadership roles. 
+
+---
+
+## **3. How Long Do Women Remain in Parliament?**  
+
+When it comes to political careers, men often enjoy longer parliamentary tenures than women. But how significant is this gap, and what does it reveal about the challenges women face in politics?  
+
+```{r career_lenght_plot, echo=FALSE, message=FALSE, warning=FALSE}
+# -------------------------
+# Gender Share Calculation
+# -------------------------
+
+# Function to calculate gender share across sessions
+calculate_gender_share <- function(political_data, core_data, session_filter = NULL, date_filter = NULL, country_name) {
+  data <- political_data %>%
+    left_join(core_data %>% select(pageid, sex), by = "pageid") %>%
+    filter(!is.na(sex))  # Remove missing gender data
+  
+  # Apply filters
+  if (!is.null(session_filter)) {
+    data <- data %>% filter(session >= session_filter)
+  }
+  if (!is.null(date_filter)) {
+    data <- data %>% filter(session_start >= date_filter)
+  }
+  
+  # Calculate gender shares
+  total_count <- nrow(data)
+  female_count <- sum(data$sex == "female")
+  male_count <- sum(data$sex == "male")
+  
+  tibble(
+    country = country_name,
+    female_share = female_count / total_count,
+    male_share = male_count / total_count
+  )
+}
+
+# Calculate gender shares for all countries
+Turkey_gender  <- calculate_gender_share(Turkey, Turkey_core, session_filter = 9, country_name = "Turkey")
+Brazil_gender  <- calculate_gender_share(Brazil, Brazil_core, session_filter = 39, country_name = "Brazil")
+Japan_gender   <- calculate_gender_share(Japan, Japan_core, session_filter = 24, country_name = "Japan")
+Germany_gender <- calculate_gender_share(Germany, Germany_core, date_filter = as.Date("1950-01-01"), country_name = "Germany")
+UK_gender      <- calculate_gender_share(UK, UK_core, date_filter = as.Date("1950-01-01"), country_name = "United Kingdom")
+Canada_gender  <- calculate_gender_share(Canada, Canada_core, date_filter = as.Date("1950-01-01"), country_name = "Canada")
+
+# Combine results
+gender_share_table <- bind_rows(Turkey_gender, Brazil_gender, Japan_gender, Germany_gender, UK_gender, Canada_gender)
+
+# -------------------------
+# Career Duration Analysis: Calculate average career length by gender
+# -------------------------
+
+# Function to calculate average career duration
+calculate_avg_career_duration <- function(political_data, core_data, session_filter = NULL, country_name) {
+  data <- political_data %>%
+    left_join(core_data %>% select(pageid, sex), by = "pageid") %>%
+    filter(!is.na(sex))  # Remove missing gender data
+  
+  if (!is.null(session_filter)) {
+    data <- data %>% filter(session >= session_filter)
+  }
+  
+  # Group by parliamentarian and gender, calculate career duration
+  career_lengths <- data %>%
+    group_by(pageid, sex) %>%
+    summarize(career_duration = n_distinct(session), .groups = "drop")
+  
+  # Average career duration by gender
+  career_summary <- career_lengths %>%
+    group_by(sex) %>%
+    summarize(avg_career_duration = mean(career_duration, na.rm = TRUE)) %>%
+    pivot_wider(names_from = sex, values_from = avg_career_duration) %>%
+    mutate(country = country_name)
+  
+  return(career_summary)
+}
+
+# Calculate average career durations for each country
+Turkey_career  <- calculate_avg_career_duration(Turkey, Turkey_core, session_filter = 9, country_name = "Turkey")
+Brazil_career  <- calculate_avg_career_duration(Brazil, Brazil_core, session_filter = 39, country_name = "Brazil")
+Japan_career   <- calculate_avg_career_duration(Japan, Japan_core, session_filter = 24, country_name = "Japan")
+Germany_career <- calculate_avg_career_duration(Germany, Germany_core, session_filter = 1, country_name = "Germany")
+UK_career      <- calculate_avg_career_duration(UK, UK_core, session_filter = 1, country_name = "United Kingdom")
+Canada_career  <- calculate_avg_career_duration(Canada, Canada_core, session_filter = 1, country_name = "Canada")
+
+# Combine results into a single table
+career_duration_table <- bind_rows(Turkey_career, Brazil_career, Japan_career, Germany_career, UK_career, Canada_career)
+
+# Rename columns and calculate difference
+career_duration_table <- career_duration_table %>%
+  rename(
+    female_avg_sessions = female,
+    male_avg_sessions = male
+  ) %>%
+  mutate(career_length_diff = male_avg_sessions - female_avg_sessions) %>%
+  select(country, female_avg_sessions, male_avg_sessions, career_length_diff)
+
+# -------------------------
+# Plot Career Length Difference
+# -------------------------
+
+# Prepare data for plotting
+barchart_data <- career_duration_table %>%
+  arrange(desc(career_length_diff)) %>%
+  mutate(country = factor(country, levels = country))
+
+
+# Create bar chart with bold axis title and adjusted spacing
+ggplot(barchart_data, aes(x = reorder(country, career_length_diff), y = career_length_diff)) +
+  geom_bar(stat = "identity", fill = "brown", color = "brown", width = 0.6) +  # Slimmer bars
+  labs(
+    title = "Difference in Career Length Between Men and Women",
+    subtitle = "Sorted by the Difference in Sessions",
+    x = "Country",
+    y = "Difference in Career Length (Sessions)"
+  ) +
+  theme_economist() +  # Apply The Economist style
+  theme(
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 10)),  # Bold title
+    plot.subtitle = element_text(size = 12, margin = margin(b = 10)),             # Subtitle spacing
+    axis.title.x = element_text(size = 12, face = "bold", margin = margin(t = 8)), # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold", margin = margin(r = 12)), # Bold y-axis title with spacing
+    axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1, size = 10, face = "bold"),  # Bold x-axis text
+    axis.text.y = element_text(size = 10),
+    panel.spacing = unit(1, "lines")  # Clean spacing
+  )
+
+```
+
+**Key Insights:**
+
+In **Japan**, the disparity is the most pronounced: **men serve** an average of **1.6 sessions longer** than women. This stark difference raises questions about the barriers hindering women from sustaining political careers. The United Kingdom shows a smaller, but still significant gap, with men serving about half a session longer on average.
+
+In **Brazil, Germany, and Canada**, the differences are more modest, ranging from **0.3 to 0.4 sessions**. However, even these smaller gaps reflect enduring inequalities in career longevity. Interestingly, **Turkey** bucks the trend with the smallest gap—just **0.2 sessions**—suggesting recent progress in fostering a more supportive environment for women politicians.
+
+These patterns are consistent with broader research. Across Western Europe and North America (1965–2020), women have struggled to achieve equal representation in senior parliamentary roles. Men tend to dominate leadership positions and hold onto power for longer periods [Muriaas & Stavenes (2024)](https://www.researchgate.net/publication/331986214_Why_do_men_dominate_leadership_and_power_positions). Similarly, in the U.S. House of Representatives, men—especially among Democrats—are more likely to enjoy extended tenures than women [Lazarus, Steigerwalt & Clark (2022)](https://www.cambridge.org/core/services/aop-cambridge-core/content/view/26AC8883B145DADD6DB4477783A7CA80/S1743923X21000428a.pdf/time_spent_in_the_house_gender_and_the_political_careers_of_us_house_members.pdf).
+
+----
+
+## Conclusion: What does this mean?
+
+Women in politics have made notable progress, overcoming barriers to enter spaces historically shaped by and for men. But has this increase in representation translated into equal recognition and visibility? 
+
+Our analysis, driven by the question “How has female representation in politics evolved over time, and does public visibility reflect this progress?”, uncovers a nuanced story. Since 1950, female representation in parliaments has steadily improved, but progress remains uneven. Countries like Germany and the United Kingdom have emerged as leaders, while Japan and Turkey continue to lag behind, highlighting persistent cultural and structural challenges. 
+
+Public visibility, however, offers a more encouraging outlook. On Wikipedia, female politicians often attract more attention than their male counterparts. This digital spotlight reflects a growing public interest in female leadership, particularly in systems where women’s roles are still seen as groundbreaking. 
+
+Nevertheless, challenges remain. Women continue to face shorter political careers compared to men, with disparities particularly pronounced in countries like Japan. In summary: female representation in politics has evolved, and digital platforms increasingly highlight this progress. Closing this gap demands continued commitment and action, paving the way for a future where women's political participation is not just visible, but lasting and equal worldwide.

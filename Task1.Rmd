@@ -1,0 +1,143 @@
+---
+title: "Hackathon - Task 1"
+author: "Jasmin Mehnert"
+date: "(Fall 2024) Introduction to Data Science Workshop"
+output: 
+    rmdformats::robobook:
+    toc: TRUE
+    df_print: paged
+    number_sections: FALSE
+    highlight: tango
+    toc_depth: 3
+    toc_float: true
+    full_width: true
+---
+
+### Author:
+
+**Jasmin Mehnert, E-Mail: j.mehnert@students.hertie-school.org**
+
+---
+
+```{=html}
+<style>
+
+summary {
+  font-size: 1.1em;
+}
+
+summary:hover {
+  text-decoration: underline;
+}
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+### Interactive map of US Senator birthplaces
+
+```{r, include = TRUE, fig.width=12, fig.height=8, out.width='100%'}
+# Install necessary packages if not already installed
+required_packages <- c("sf", "dplyr", "tigris", "leaflet", "RColorBrewer", "legislatoR", "tidyr", "viridis")
+new_packages <- required_packages[!(required_packages %in% installed.packages()[, "Package"])]
+if(length(new_packages)) install.packages(new_packages)
+
+# Load necessary librarys
+library(sf)
+library(dplyr)
+library(tigris)
+library(leaflet)
+library(RColorBrewer)
+library(legislatoR)
+library(tidyr)
+library(viridis)
+
+# Data source acknowledgment:
+# Göbel, Sascha and Simon Munzert. 2022. 
+# "The Comparative Legislators Database". 
+# British Journal of Political Science, 52(3), 1398-1408.
+
+# Note: Assistance from ChatGPT was used to structure and debug this code.
+
+# Extract data for USA Senate
+usa_senate_core <- get_core(legislature = "usa_senate")
+
+# Extract latitude and longitude out of birthplace columns
+usa_senate_core <- usa_senate_core %>%
+  filter(!is.na(birthplace)) %>% # delete NA values in birthplace
+  separate(birthplace, into = c("lat", "lon"), sep = ",", convert = TRUE) %>% # Split in lat and lon
+  mutate(lat = as.numeric(lat), lon = as.numeric(lon)) %>% # Convert to numerical
+  filter(!is.na(lat) & !is.na(lon)) # Remove invalid coordinates
+
+# Convert the senator data into sf-object
+senator_points <- st_as_sf(usa_senate_core, coords = c("lon", "lat"), crs = 4326)
+
+# Load shapefile of US-States
+states <- tigris::states(cb = TRUE)
+
+# Transform states to WGS84, if needed 
+if (st_crs(states) != st_crs(senator_points)) {
+  states <- st_transform(states, st_crs(senator_points))
+}
+
+# Add US-State
+senators_with_states <- st_join(senator_points, states, join = st_within)
+
+# Delete NA-values (not born in USA)
+senators_with_states <- senators_with_states %>%
+  filter(!is.na(STUSPS)) %>%
+  mutate(state = STUSPS)  # Add column with state
+
+# Calculate number of senators per state
+state_counts <- senators_with_states %>%
+  group_by(state) %>%
+  summarise(senator_count = n(), .groups = "drop") |>
+  st_drop_geometry()
+
+# Tabular join with left_join()
+state_data <- states %>%
+  left_join(state_counts, by = c("STUSPS" = "state")) %>%
+  mutate(senator_count = replace_na(senator_count, 0))  # Fehlende Werte mit 0 auffüllen
+
+# Use the viridis palette for colorblindness
+color_palette <- colorBin(viridis(5, option = "viridis", direction = -1), 
+                          domain = state_data$senator_count, bins = 5)
+
+leaflet(data = state_data) %>%
+  addProviderTiles(providers$OpenStreetMap.Mapnik) %>%
+  setView(lng = -95, lat = 37, zoom = 3) %>%  # Fokus auf die USA
+  addPolygons(
+    fillColor = ~color_palette(senator_count),
+    weight = 1,
+    color = "white",
+    fillOpacity = 0.7,
+    popup = ~paste0(NAME, ": ", senator_count, " Senators"),  # Popup-Text anpassen
+    label = ~paste0(NAME, ": ", senator_count, " Senators"),  # Tooltip-Text
+    labelOptions = labelOptions(
+      style = list("font-weight" = "bold"),
+      textsize = "14px"
+    )
+  ) %>%
+  addLegend(
+    "bottomright",
+    pal = color_palette,
+    values = ~senator_count,
+    title = "Number of Senators",
+    opacity = 0.7
+  ) %>%
+  addControl(
+    html = "<h2 style='color: black;'>Number of U.S. Senators Born in Each State</h2>",
+    position = "topleft"
+  ) %>%
+  addControl(
+    html = "<p style='color: grey; font-size:12px; text-align: left; 
+          max-width: 300px; margin: 0;'>
+          Data Source: Göbel, Sascha und Simon Munzert. 2022. 
+          'The Comparative Legislators Database'. 
+          British Journal of Political Science, 52(3), 1398-1408.
+          </p>",
+    position = "bottomleft"
+  )
+```
